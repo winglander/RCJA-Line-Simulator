@@ -2249,7 +2249,7 @@ function definePybricksBlocks(){
   // Color constant picker
   val('color_constant',SN,'String',function(){
     this.appendDummyInput().appendField('Color').appendField(new Blockly.FieldDropdown([
-      ['🔴 Red','RED'],['🟡 Yellow','YELLOW'],['🟢 Green','GREEN'],['🔵 Blue','BLUE'],['⚪ White','WHITE'],['⛔ None','NONE']
+      ['⬛ Black','BLACK'],['⚪ White','WHITE'],['🔴 Red','RED'],['🟢 Green','GREEN'],['🩶 Silver','SILVER'],['⛔ None','NONE']
     ]),'COLOR');
     this.setTooltip('A colour value for comparison (e.g. if color == Color.GREEN)');
   },function(b){return ['Color.'+b.getFieldValue('COLOR'),Blockly.Python.ORDER_MEMBER];});
@@ -2440,7 +2440,7 @@ function buildSkulptModules(){
   Sk.builtinFiles.files['src/lib/pybricks/parameters.py']=
     'class Port:\n  A="A"\n  B="B"\n  C="C"\n  D="D"\n  E="E"\n  F="F"\n'+
     'class Stop:\n  HOLD="HOLD"\n  COAST="COAST"\n  BRAKE="BRAKE"\n  NONE="NONE"\n'+
-    'class Color:\n  BLACK="BLACK"\n  WHITE="WHITE"\n  RED="RED"\n  GREEN="GREEN"\n  BLUE="BLUE"\n  YELLOW="YELLOW"\n  ORANGE="ORANGE"\n  VIOLET="VIOLET"\n  CYAN="CYAN"\n  MAGENTA="MAGENTA"\n  GRAY="GRAY"\n  NONE="NONE"\n'+
+    'class Color:\n  BLACK="BLACK"\n  WHITE="WHITE"\n  RED="RED"\n  GREEN="GREEN"\n  BLUE="BLUE"\n  YELLOW="YELLOW"\n  ORANGE="ORANGE"\n  VIOLET="VIOLET"\n  CYAN="CYAN"\n  MAGENTA="MAGENTA"\n  GRAY="GRAY"\n  SILVER="SILVER"\n  NONE="NONE"\n'+
     'class Direction:\n  CLOCKWISE=1\n  COUNTERCLOCKWISE=-1\n'+
     'class Axis:\n  X="X"\n  Y="Y"\n  Z="Z"\n';
 
