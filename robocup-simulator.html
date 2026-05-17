@@ -2655,8 +2655,8 @@ function setupSimShim(){
     usDistance:()=>castUS(),
     drive:(speed,turn)=>{
       const trackMM=cfg.axleTrack;
-      robot.vLeft=speed-turn*trackMM/360;
-      robot.vRight=speed+turn*trackMM/360;
+      robot.vLeft=speed+turn*trackMM/360;
+      robot.vRight=speed-turn*trackMM/360;
     },
     stop:()=>{robot.vLeft=0;robot.vRight=0;},
     robotX:()=>robot.x,
