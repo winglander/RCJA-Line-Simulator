@@ -217,9 +217,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     <div id="codeOverlay">
       <div class="code-header">
         <h2>BLOCK CODING</h2>
-        <button class="btn primary" id="btnRunCode" onclick="runUserCode()">RUN CODE</button>
-        <button class="btn danger" id="btnStopCode" onclick="stopUserCode()">STOP</button>
-        <button class="btn" onclick="resetFromCode()">RESET</button>
         <button class="btn" onclick="toggleCodePanel()">DONE</button>
       </div>
       <div class="code-body">
@@ -289,6 +286,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     <option value="tuned">Tuned P (k=2.5)</option>
     <option value="basic">Basic P (k=1.0)</option>
     <option value="bangbang">Bang-Bang</option>
+    <option value="usercode">Use Code</option>
   </select>
   <button class="btn" id="btnFollow" onclick="toggleFollow()">FOLLOW</button>
   <span id="levelBtns" style="display:inline-flex;gap:2px;margin-left:4px;">
@@ -1930,6 +1928,16 @@ function toggleRun(){
       alert('No start tile found. Select a drop zone (click an orange edge) and choose a direction before running.');
       return;
     }
+    if(demoMode==='usercode'){
+      if(!blocklyWorkspace){alert('Open the CODE panel and create a program first.');return;}
+      const code=Blockly.Python.workspaceToCode(blocklyWorkspace);
+      if(!code.trim()){alert('No code to run. Open the CODE panel and drag blocks first.');return;}
+      runUserCode();
+      return;
+    }
+  } else if(userCodeRunning){
+    stopUserCode();
+    return;
   }
   running=!running;
   const b=document.getElementById('btnRun');
@@ -1938,7 +1946,7 @@ function toggleRun(){
   if(running){lastTime=null;collapseConfigSections(true);}
   else{collapseConfigSections(false);}
 }
-function resetRobot(){running=false;document.getElementById('btnRun').textContent='RUN';document.getElementById('btnRun').className='btn primary';robot.tilt=0;robot.rampState='none';lastTime=null;spawnAtStart();computeTilt();setViewLevel(robot.level);}
+function resetRobot(){if(userCodeRunning)stopUserCode();running=false;document.getElementById('btnRun').textContent='RUN';document.getElementById('btnRun').className='btn primary';robot.tilt=0;robot.rampState='none';lastTime=null;spawnAtStart();computeTilt();setViewLevel(robot.level);}
 function setViewLevel(lv){
   viewLevel=lv;
   if(!running) robot.level=lv;
@@ -2083,10 +2091,6 @@ function closeCodePanel(){
   const wrap=document.querySelector('.canvas-wrap');
   wrap.insertBefore(c,wrap.firstChild);
   requestAnimationFrame(()=>{resizeCanvas();compileArena();});
-}
-function resetFromCode(){
-  stopUserCode();
-  resetRobot();
 }
 
 // --- Blockly Custom Blocks ---
@@ -2716,7 +2720,9 @@ function runUserCode(){
   // Reset robot and start sim
   resetRobot();
   running=true;lastTime=null;
-  document.getElementById('btnRun').textContent='PAUSE';document.getElementById('btnRun').className='btn running';
+  const b=document.getElementById('btnRun');
+  b.textContent='STOP';b.className='btn danger';
+  collapseConfigSections(true);
   userCodeRunning=true;
   codeAbortFlag=false;window._codeAbort=false;
   setupSimShim();
@@ -2736,8 +2742,6 @@ function runUserCode(){
   });
   buildSkulptModules();
   buildHubModule();
-  document.getElementById('btnRunCode').textContent='RUNNING...';
-  document.getElementById('btnRunCode').disabled=true;
   Sk.misceval.asyncToPromise(function(){
     return Sk.importMainWithBody('<stdin>',false,code,true);
   },{
@@ -2745,18 +2749,20 @@ function runUserCode(){
       if(window._codeAbort) throw new Sk.builtin.ExternalError('Aborted');
     }
   }).then(function(){
-    userCodeRunning=false;
+    userCodeRunning=false;running=false;
     appendConsole('\n--- Program finished ---\n');
-    document.getElementById('btnRunCode').textContent='RUN CODE';
-    document.getElementById('btnRunCode').disabled=false;
+    const b=document.getElementById('btnRun');
+    b.textContent='RUN';b.className='btn primary';
+    collapseConfigSections(false);
   }).catch(function(err){
-    userCodeRunning=false;
+    userCodeRunning=false;running=false;
     if(err&&err.toString&&!err.toString().includes('Aborted')){
       appendConsoleError(err.toString());
     }
     appendConsole('\n--- Program stopped ---\n');
-    document.getElementById('btnRunCode').textContent='RUN CODE';
-    document.getElementById('btnRunCode').disabled=false;
+    const b=document.getElementById('btnRun');
+    b.textContent='RUN';b.className='btn primary';
+    collapseConfigSections(false);
   });
 }
 
@@ -2767,9 +2773,9 @@ function stopUserCode(){
     robot.vLeft=0;robot.vRight=0;
   }
   running=false;
-  document.getElementById('btnRun').textContent='RUN';document.getElementById('btnRun').className='btn primary';
-  document.getElementById('btnRunCode').textContent='RUN CODE';
-  document.getElementById('btnRunCode').disabled=false;
+  const b=document.getElementById('btnRun');
+  b.textContent='RUN';b.className='btn primary';
+  collapseConfigSections(false);
 }
 
 // ===============================================
