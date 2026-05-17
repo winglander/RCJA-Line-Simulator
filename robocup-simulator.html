@@ -210,6 +210,9 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
     <div id="codeOverlay">
       <div class="code-header">
         <h2>BLOCK CODING</h2>
+        <button class="btn" onclick="saveBlocksToFile()">SAVE</button>
+        <button class="btn" onclick="document.getElementById('blockFileInput').click()">LOAD</button>
+        <input type="file" id="blockFileInput" accept=".xml,.blockly" style="display:none" onchange="loadBlocksFromFile(this)">
         <button class="btn" onclick="toggleCodePanel()">DONE</button>
       </div>
       <div class="code-body">
@@ -2073,6 +2076,33 @@ function openCodePanel(){
 function closeCodePanel(){
   stopUserCode();
   document.getElementById('codeOverlay').classList.remove('active');
+}
+function saveBlocksToFile(){
+  if(!blocklyWorkspace) return;
+  const dom=Blockly.Xml.workspaceToDom(blocklyWorkspace);
+  const text=Blockly.Xml.domToText(dom);
+  const blob=new Blob([text],{type:'application/xml'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='my_program.blockly';
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function loadBlocksFromFile(input){
+  if(!input.files||!input.files[0]) return;
+  const file=input.files[0];
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const dom=Blockly.utils.xml.textToDom(e.target.result);
+      blocklyWorkspace.clear();
+      Blockly.Xml.domToWorkspace(dom,blocklyWorkspace);
+    }catch(err){
+      alert('Failed to load block file: '+err.message);
+    }
+  };
+  reader.readAsText(file);
+  input.value=''; // reset so same file can be loaded again
 }
 
 // --- Blockly Custom Blocks ---
