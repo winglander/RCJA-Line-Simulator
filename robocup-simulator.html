@@ -2209,7 +2209,7 @@ function definePybricksBlocks(){
   // Color constant picker
   val('color_constant',SN,'String',function(){
     this.appendDummyInput().appendField('Color').appendField(new Blockly.FieldDropdown([
-      ['Red','RED'],['Yellow','YELLOW'],['Green','GREEN'],['Blue','BLUE'],['White','WHITE'],['None','NONE']
+      ['🔴 Red','RED'],['🟡 Yellow','YELLOW'],['🟢 Green','GREEN'],['🔵 Blue','BLUE'],['⚪ White','WHITE'],['⛔ None','NONE']
     ]),'COLOR');
     this.setTooltip('A colour value for comparison (e.g. if color == Color.GREEN)');
   },function(b){return ['Color.'+b.getFieldValue('COLOR'),Blockly.Python.ORDER_MEMBER];});
