@@ -2206,6 +2206,14 @@ function definePybricksBlocks(){
     this.setTooltip('Ambient light intensity (0-100)');
   },function(b){return ['color_'+b.getFieldValue('SIDE')+'.ambient()',Blockly.Python.ORDER_FUNCTION_CALL];});
 
+  // Color constant picker
+  val('color_constant',SN,'String',function(){
+    this.appendDummyInput().appendField('Color').appendField(new Blockly.FieldDropdown([
+      ['Red','RED'],['Yellow','YELLOW'],['Green','GREEN'],['Blue','BLUE'],['White','WHITE'],['None','NONE']
+    ]),'COLOR');
+    this.setTooltip('A colour value for comparison (e.g. if color == Color.GREEN)');
+  },function(b){return ['Color.'+b.getFieldValue('COLOR'),Blockly.Python.ORDER_MEMBER];});
+
   // === ULTRASONIC ===
   val('ultrasonic_distance',SN,'Number',function(){
     this.appendDummyInput().appendField('ultrasonic distance');this.setTooltip('Distance in mm (max 2000)');
@@ -2299,6 +2307,7 @@ function getToolbox(){
       {kind:'block',type:'color_color'},
       {kind:'block',type:'color_hsv'},
       {kind:'block',type:'color_ambient'},
+      {kind:'block',type:'color_constant'},
       {kind:'block',type:'ultrasonic_distance'}
     ]},
     {kind:'category',name:'IMU',colour:290,contents:[
