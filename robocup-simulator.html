@@ -2075,6 +2075,8 @@ function openCodePanel(){
   document.getElementById('btnRun').textContent='RUN';document.getElementById('btnRun').className='btn primary';
   // Close editor if open
   if(document.getElementById('editorOverlay').classList.contains('active')) closeEditor();
+  // Collapse left panel
+  document.querySelector('.panel').style.display='none';
   // Reparent canvas into mini view
   const c=document.getElementById('arenaCanvas');
   document.getElementById('simMiniWrap').appendChild(c);
@@ -2086,6 +2088,8 @@ function openCodePanel(){
 function closeCodePanel(){
   stopUserCode();
   document.getElementById('codeOverlay').classList.remove('active');
+  // Restore left panel
+  document.querySelector('.panel').style.display='';
   // Reparent canvas back
   const c=document.getElementById('arenaCanvas');
   const wrap=document.querySelector('.canvas-wrap');
