@@ -2077,11 +2077,21 @@ function closeCodePanel(){
   stopUserCode();
   document.getElementById('codeOverlay').classList.remove('active');
 }
-function saveBlocksToFile(){
+async function saveBlocksToFile(){
   if(!blocklyWorkspace) return;
   const dom=Blockly.Xml.workspaceToDom(blocklyWorkspace);
   const text=Blockly.Xml.domToText(dom);
   const blob=new Blob([text],{type:'application/xml'});
+  if(window.showSaveFilePicker){
+    try{
+      const handle=await showSaveFilePicker({suggestedName:'my_program.blockly',types:[{description:'Block Program',accept:{'application/xml':['.blockly','.xml']}}]});
+      const writable=await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return;
+    }catch(e){if(e.name!=='AbortError') console.warn('Save failed:',e);}
+    return;
+  }
   const a=document.createElement('a');
   a.href=URL.createObjectURL(blob);
   a.download='my_program.blockly';
