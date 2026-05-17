@@ -2232,6 +2232,18 @@ function definePybricksBlocks(){
     this.appendDummyInput().appendField('IMU stationary?');this.setTooltip('True if hub is not moving');
   },function(){return ['hub.imu.stationary()',Blockly.Python.ORDER_FUNCTION_CALL];});
 
+  // === FOREVER LOOP ===
+  Blockly.Blocks['controls_forever']={init:function(){
+    this.appendDummyInput().appendField('forever');
+    this.appendStatementInput('DO').setCheck(null);
+    this.setPreviousStatement(true);this.setColour(120);
+    this.setTooltip('Repeat forever (while True)');
+  }};
+  Blockly.Python.forBlock['controls_forever']=function(block){
+    const body=Blockly.Python.statementToCode(block,'DO')||Blockly.Python.INDENT+'pass\n';
+    return 'while True:\n'+body;
+  };
+
   // === TIMING ===
   stmt('pybricks_wait',TM,function(){
     this.appendValueInput('MS').setCheck('Number').appendField('wait');
@@ -2311,6 +2323,7 @@ function getToolbox(){
       {kind:'block',type:'logic_negate'},{kind:'block',type:'logic_boolean'}
     ]},
     {kind:'category',name:'Loops',categorystyle:'loop_category',contents:[
+      {kind:'block',type:'controls_forever'},
       {kind:'block',type:'controls_repeat_ext',inputs:{TIMES:{shadow:{type:'math_number',fields:{NUM:10}}}}},
       {kind:'block',type:'controls_whileUntil'},{kind:'block',type:'controls_for'}
     ]},
