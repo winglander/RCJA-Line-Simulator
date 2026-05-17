@@ -106,24 +106,17 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
   .tile-palette{width:160px;}
 }
 /* CODE OVERLAY */
-#codeOverlay{display:none;position:absolute;inset:0;background:rgba(26,26,46,0.98);z-index:10;flex-direction:column;}
+#codeOverlay{display:none;position:fixed;inset:0;background:var(--bg);z-index:100;flex-direction:column;}
 #codeOverlay.active{display:flex;}
 .code-header{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0;}
 .code-header h2{font-family:'JetBrains Mono',monospace;font-size:0.85rem;letter-spacing:2px;color:var(--accent2);margin-right:auto;}
 .code-header .btn{flex:none;padding:6px 14px;font-size:0.7rem;}
 .code-body{display:flex;flex:1;overflow:hidden;}
-.blockly-wrap{flex:2;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--border);}
+.blockly-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;}
 #blocklyDiv{flex:1;min-height:0;}
 .code-preview{height:150px;overflow:auto;border-top:1px solid var(--border);background:#0d1117;padding:8px;font-family:'JetBrains Mono',monospace;font-size:0.7rem;color:#c9d1d9;white-space:pre;tab-size:4;}
 .code-console{height:100px;overflow:auto;border-top:1px solid var(--border);background:#0a0a12;padding:8px;font-family:'JetBrains Mono',monospace;font-size:0.65rem;color:#8b949e;white-space:pre-wrap;}
 .code-console .err{color:#f85149;}
-.sim-mini-wrap{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:200px;}
-.sim-mini-wrap canvas{flex:1;display:block;}
-@media(max-width:700px){
-  .code-body{flex-direction:column;}
-  .blockly-wrap{flex:1;border-right:none;border-bottom:1px solid var(--border);}
-  .sim-mini-wrap{flex:0 0 200px;min-width:unset;}
-}
 </style>
 <script src="https://unpkg.com/blockly/blockly_compressed.js"></script>
 <script src="https://unpkg.com/blockly/blocks_compressed.js"></script>
@@ -225,7 +218,6 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
           <pre class="code-preview" id="pythonPreview">// Python preview will appear here</pre>
           <pre class="code-console" id="codeConsole"></pre>
         </div>
-        <div class="sim-mini-wrap" id="simMiniWrap"></div>
       </div>
     </div>
 
@@ -2073,28 +2065,14 @@ function toggleCodePanel(){
 function openCodePanel(){
   running=false;userCodeRunning=false;
   document.getElementById('btnRun').textContent='RUN';document.getElementById('btnRun').className='btn primary';
-  // Close editor if open
   if(document.getElementById('editorOverlay').classList.contains('active')) closeEditor();
-  // Collapse left panel
-  document.querySelector('.panel').style.display='none';
-  // Reparent canvas into mini view
-  const c=document.getElementById('arenaCanvas');
-  document.getElementById('simMiniWrap').appendChild(c);
   document.getElementById('codeOverlay').classList.add('active');
-  resizeCanvas();compileArena();
   if(!blocklyWorkspace) initBlockly();
   else Blockly.svgResize(blocklyWorkspace);
 }
 function closeCodePanel(){
   stopUserCode();
   document.getElementById('codeOverlay').classList.remove('active');
-  // Restore left panel
-  document.querySelector('.panel').style.display='';
-  // Reparent canvas back
-  const c=document.getElementById('arenaCanvas');
-  const wrap=document.querySelector('.canvas-wrap');
-  wrap.insertBefore(c,wrap.firstChild);
-  requestAnimationFrame(()=>{resizeCanvas();compileArena();});
 }
 
 // --- Blockly Custom Blocks ---
