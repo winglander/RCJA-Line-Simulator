@@ -149,6 +149,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
       <div class="panel-body">
         <div class="slider-row"><label>Wheel Diameter</label><input type="range" id="s_wheelDiam" min="30" max="90" step="2" value="56" oninput="updateConfig()"><span class="slider-val" id="v_wheelDiam">56 mm</span></div>
         <div class="slider-row"><label>Axle Track</label><input type="range" id="s_axleTrack" min="56" max="160" step="4" value="112" oninput="updateConfig()"><span class="slider-val" id="v_axleTrack">112 mm</span></div>
+        <div class="slider-row"><label>Drive Axle Offset (+ = fwd)</label><input type="range" id="s_driveFwd" min="-40" max="40" step="2" value="0" oninput="updateConfig()"><span class="slider-val" id="v_driveFwd">0 mm</span></div>
       </div>
     </div>
     <div class="panel-section">
@@ -191,6 +192,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;heigh
           <div class="sensor-box"><div class="s-label">IMU Tilt</div><div class="s-val" id="r_tilt">0.0 deg</div></div>
           <div class="sensor-box"><div class="s-label">Elevation</div><div class="s-val" id="r_elev">0 mm</div></div>
           <div class="sensor-box"><div class="s-label">Motor Load</div><div class="s-val" id="r_load">100%</div></div>
+          <div class="sensor-box sensor-full" id="stallBox" style="display:none;background:rgba(233,69,96,0.15);border-color:#e94560"><div class="s-label" style="color:#e94560">⚠ STALLED — Sensor Ground Collision</div></div>
         </div>
       </div>
     </div>
@@ -688,8 +690,8 @@ let selectedDropZone=null; // {zone, side} — selected start from drop zone
 // ===============================================
 // ROBOT CONFIG & STATE
 // ===============================================
-let cfg={wheelDiam:56,axleTrack:112,colorFwd:44,colorSpread:15,colorHeight:20,ultraFwd:44,passiveFwd:-44,passiveLat:0,imuDrift:0};
-let robot={x:300,y:900,heading:90,vLeft:0,vRight:0,imuHeading:90,elevation:0,groundElev:0,tilt:0,rampState:'none',level:0};
+let cfg={wheelDiam:56,axleTrack:112,driveFwd:0,colorFwd:44,colorSpread:15,colorHeight:20,ultraFwd:44,passiveFwd:-44,passiveLat:0,imuDrift:0};
+let robot={x:300,y:900,heading:90,vLeft:0,vRight:0,imuHeading:90,elevation:0,groundElev:0,tilt:0,rampState:'none',level:0,stalled:false};
 let running=false,pipCollapsed=false,lastTime=null,viewLevel=0,userCodeRunning=false;
 
 // ===============================================
@@ -922,7 +924,8 @@ function sensorHeightDiff(lat){
   const fwd=cfg.colorFwd;
   const sx=robot.x+lat*Math.cos(rad)+fwd*Math.sin(rad);
   const sy=robot.y-fwd*Math.cos(rad)+lat*Math.sin(rad);
-  const bodyZ=bodyPlane.a*lat+bodyPlane.b*fwd+bodyPlane.c;
+  const fwdRel=fwd-cfg.driveFwd; // fwd relative to drive axle (body plane origin)
+  const bodyZ=bodyPlane.a*lat+bodyPlane.b*fwdRel+bodyPlane.c;
   const sensorAboveBody=cfg.colorHeight-cfg.wheelDiam/2; // sensor offset above body plane (axle)
   const sensorZ=bodyZ+sensorAboveBody;
   const groundZ=elevAt(sx,sy);
@@ -996,9 +999,10 @@ function computeTilt(){
   const rad=robot.heading*Math.PI/180;
   const wr=cfg.wheelDiam/2; // drive wheel radius
   const pr=wr;              // passive wheel mount height matches drive wheel so chassis sits level on flat ground
-  // Ground contact positions
-  const lx=robot.x+(-cfg.axleTrack/2)*Math.cos(rad),ly=robot.y+(-cfg.axleTrack/2)*Math.sin(rad);
-  const rx=robot.x+(cfg.axleTrack/2)*Math.cos(rad),ry=robot.y+(cfg.axleTrack/2)*Math.sin(rad);
+  // Ground contact positions (drive wheels offset forward/backward by driveFwd)
+  const df=cfg.driveFwd;
+  const lx=robot.x+df*Math.sin(rad)+(-cfg.axleTrack/2)*Math.cos(rad),ly=robot.y-df*Math.cos(rad)+(-cfg.axleTrack/2)*Math.sin(rad);
+  const rx=robot.x+df*Math.sin(rad)+(cfg.axleTrack/2)*Math.cos(rad),ry=robot.y-df*Math.cos(rad)+(cfg.axleTrack/2)*Math.sin(rad);
   const ppx=robot.x+cfg.passiveLat*Math.cos(rad)+cfg.passiveFwd*Math.sin(rad);
   const ppy=robot.y-cfg.passiveFwd*Math.cos(rad)+cfg.passiveLat*Math.sin(rad);
   // Ground elevations at contact points
@@ -1010,7 +1014,8 @@ function computeTilt(){
   const T=cfg.axleTrack;
   const pa=(T>0)?(zR-zL)/T:0;
   const pc=zD;
-  const pb=(Math.abs(cfg.passiveFwd)>1)?(zP-pa*cfg.passiveLat-pc)/cfg.passiveFwd:0;
+  const pFwdRel=cfg.passiveFwd-cfg.driveFwd; // passive fwd offset relative to drive axle
+  const pb=(Math.abs(pFwdRel)>1)?(zP-pa*cfg.passiveLat-pc)/pFwdRel:0;
   bodyPlane={a:pa,b:pb,c:pc};
   const mx=(lx+rx)/2,my=(ly+ry)/2;
   const wb=Math.sqrt((ppx-mx)**2+(ppy-my)**2);
@@ -1032,10 +1037,26 @@ function getRampKey(){
   }
   return 'none';
 }
+function checkSensorClearance(){
+  // Check if colour sensor housings collide with the ground
+  const rad=robot.heading*Math.PI/180;
+  const fwd=cfg.colorFwd,fwdRel=fwd-cfg.driveFwd;
+  const sensorAboveBody=cfg.colorHeight-cfg.wheelDiam/2;
+  for(const lat of [-cfg.colorSpread,cfg.colorSpread]){
+    const sx=robot.x+lat*Math.cos(rad)+fwd*Math.sin(rad);
+    const sy=robot.y-fwd*Math.cos(rad)+lat*Math.sin(rad);
+    const bodyZ=bodyPlane.a*lat+bodyPlane.b*fwdRel+bodyPlane.c;
+    const sensorZ=bodyZ+sensorAboveBody;
+    const groundZ=elevAt(sx,sy);
+    if(sensorZ<=groundZ) return true;
+  }
+  return false;
+}
 function physicsStep(dt){
+  const ox=robot.x,oy=robot.y,oh=robot.heading,ol=robot.level;
   const r=RAMP[getRampKey()]||RAMP.none;
   const vL=robot.vLeft*r.sf,vR=robot.vRight*r.sf;
-  const vLin=(vL+vR)/2,omega=(vR-vL)/cfg.axleTrack;
+  const vLin=(vL+vR)/2,omega=(vL-vR)/cfg.axleTrack;
   robot.heading+=omega*dt*(180/Math.PI);
   robot.heading=((robot.heading%360)+360)%360;
   const rad=robot.heading*Math.PI/180;
@@ -1044,6 +1065,14 @@ function physicsStep(dt){
   robot.imuHeading=robot.heading+(cfg.imuDrift/60)*(Date.now()/1000);
   computeTilt();
   updateRobotLevel();
+  // Ground clearance check — stall if sensor housing hits the ground
+  if(checkSensorClearance()){
+    robot.x=ox;robot.y=oy;robot.heading=oh;robot.level=ol;
+    computeTilt();
+    robot.stalled=true;
+  }else{
+    robot.stalled=false;
+  }
 }
 function updateRobotLevel(){
   const e=robot.groundElev;
@@ -1065,14 +1094,14 @@ function demoControl(){
     // Threshold-based: if one sensor sees darker, turn that way at fixed speed
     const base=120,turn=80;
     if(Math.abs(err)<8){robot.vLeft=base;robot.vRight=base;}
-    else if(err<0){robot.vLeft=base+turn;robot.vRight=base-turn;}
-    else{robot.vLeft=base-turn;robot.vRight=base+turn;}
+    else if(err<0){robot.vLeft=base-turn;robot.vRight=base+turn;}
+    else{robot.vLeft=base+turn;robot.vRight=base-turn;}
   }else if(demoMode==='basic'){
     // Simple proportional, low gain, slower speed
-    robot.vLeft=120-1.0*err;robot.vRight=120+1.0*err;
+    robot.vLeft=120+1.0*err;robot.vRight=120-1.0*err;
   }else{
     // Tuned proportional, high gain
-    robot.vLeft=150-2.5*err;robot.vRight=150+2.5*err;
+    robot.vLeft=150+2.5*err;robot.vRight=150-2.5*err;
   }
 }
 
@@ -1233,19 +1262,19 @@ function drawRobot(){
   ctx.save();ctx.translate(cx,cy);ctx.rotate(rad);
   const hw=MM(HUB.W)/2,hl=MM(HUB.L)/2;
   ctx.fillStyle='rgba(0,0,0,0.3)';ctx.beginPath();ctx.roundRect(-hw+3,-hl+3,MM(HUB.W),MM(HUB.L),4);ctx.fill();
-  ctx.fillStyle='#2a3a5c';ctx.beginPath();ctx.roundRect(-hw,-hl,MM(HUB.W),MM(HUB.L),4);ctx.fill();
-  ctx.strokeStyle='#4a6fa5';ctx.lineWidth=1.5;ctx.stroke();
+  ctx.fillStyle=robot.stalled?'rgba(233,69,96,0.5)':'#2a3a5c';ctx.beginPath();ctx.roundRect(-hw,-hl,MM(HUB.W),MM(HUB.L),4);ctx.fill();
+  ctx.strokeStyle=robot.stalled?'#e94560':'#4a6fa5';ctx.lineWidth=1.5;ctx.stroke();
   ctx.fillStyle='#e94560';ctx.fillRect(-hw,-hl,MM(HUB.W),3);
   for(let row=0;row<5;row++)for(let col=0;col<5;col++){
     ctx.fillStyle=Math.random()>0.7?'rgba(0,200,255,0.8)':'rgba(255,255,255,0.1)';
     ctx.beginPath();ctx.arc(-MM(10)+col*MM(5),-MM(8)+row*MM(5),MM(1.5),0,Math.PI*2);ctx.fill();
   }
-  const ht=MM(cfg.axleTrack/2),ww=MM(10),wl=MM(20);
+  const ht=MM(cfg.axleTrack/2),ww=MM(10),wl=MM(20),dfo=-MM(cfg.driveFwd);
   [-1,1].forEach(s=>{
     ctx.fillStyle='#1a1a2e';ctx.strokeStyle='#555';ctx.lineWidth=1;
-    ctx.beginPath();ctx.roundRect(s*ht-ww/2,-wl/2,ww,wl,2);ctx.fill();ctx.stroke();
+    ctx.beginPath();ctx.roundRect(s*ht-ww/2,dfo-wl/2,ww,wl,2);ctx.fill();ctx.stroke();
     ctx.strokeStyle='#333';ctx.lineWidth=0.5;
-    for(let t=-wl/2+2;t<wl/2;t+=4){ctx.beginPath();ctx.moveTo(s*ht-ww/2,t);ctx.lineTo(s*ht+ww/2,t);ctx.stroke();}
+    for(let t=-wl/2+2;t<wl/2;t+=4){ctx.beginPath();ctx.moveTo(s*ht-ww/2,dfo+t);ctx.lineTo(s*ht+ww/2,dfo+t);ctx.stroke();}
   });
   ctx.beginPath();ctx.arc(MM(cfg.passiveLat),MM(cfg.passiveFwd),MM(6),0,Math.PI*2);
   ctx.fillStyle='#2a2a3a';ctx.strokeStyle='#666';ctx.lineWidth=1;ctx.fill();ctx.stroke();
@@ -1312,6 +1341,7 @@ function updateReadouts(){
   if(robot.rampState!=='none'){rEl.textContent='RAMP '+r.angle+' deg';rEl.className='elev-pill on-ramp';}
   else{rEl.textContent='FLAT';rEl.className='elev-pill';}
   document.getElementById('st_level').textContent='L'+robot.level;
+  document.getElementById('stallBox').style.display=robot.stalled?'block':'none';
   if(running){for(let i=0;i<NUM_LEVELS;i++) document.getElementById('lvBtn'+i).className=(i===robot.level)?'btn active':'btn';}
 }
 
@@ -1336,14 +1366,14 @@ function drawRobotDiagram(){
   dctx.setLineDash([]);
   dctx.fillStyle='#e94560';dctx.font='8px JetBrains Mono,monospace';dctx.textAlign='center';dctx.fillText('FRONT',cx,cy-hl-4);
   dctx.beginPath();dctx.arc(cx,cy,3,0,Math.PI*2);dctx.fillStyle='rgba(255,255,255,0.3)';dctx.fill();
-  const ht=cfg.axleTrack*sc/2,ww=Math.max(6,8*sc),wl=Math.max(14,cfg.wheelDiam*sc*0.6);
+  const ht=cfg.axleTrack*sc/2,ww=Math.max(6,8*sc),wl=Math.max(14,cfg.wheelDiam*sc*0.6),dfOff=-cfg.driveFwd*sc;
   [-1,1].forEach(s=>{
     dctx.fillStyle='#111';dctx.strokeStyle='#888';dctx.lineWidth=1.5;
-    dctx.beginPath();dctx.roundRect(cx+s*ht-ww/2,cy-wl/2,ww,wl,2);dctx.fill();dctx.stroke();
+    dctx.beginPath();dctx.roundRect(cx+s*ht-ww/2,cy+dfOff-wl/2,ww,wl,2);dctx.fill();dctx.stroke();
     dctx.strokeStyle='#444';dctx.lineWidth=0.5;
-    for(let t=-wl/2+2;t<wl/2;t+=3){dctx.beginPath();dctx.moveTo(cx+s*ht-ww/2,cy+t);dctx.lineTo(cx+s*ht+ww/2,cy+t);dctx.stroke();}
+    for(let t=-wl/2+2;t<wl/2;t+=3){dctx.beginPath();dctx.moveTo(cx+s*ht-ww/2,cy+dfOff+t);dctx.lineTo(cx+s*ht+ww/2,cy+dfOff+t);dctx.stroke();}
     dctx.fillStyle='#e94560';dctx.font='6px JetBrains Mono,monospace';dctx.textAlign='center';
-    dctx.fillText('W',cx+s*ht,cy+wl/2+8);
+    dctx.fillText('W',cx+s*ht,cy+dfOff+wl/2+8);
   });
   dctx.beginPath();dctx.arc(cx+cfg.passiveLat*sc,cy-cfg.passiveFwd*sc,5,0,Math.PI*2);
   dctx.fillStyle='#2a2a3a';dctx.strokeStyle='#888';dctx.lineWidth=1;dctx.fill();dctx.stroke();
@@ -1363,9 +1393,10 @@ function drawRobotDiagram(){
     dctx.beginPath();dctx.arc(usx+ox,usy,dUH*0.15,0,Math.PI*2);dctx.fillStyle='rgba(233,69,96,0.5)';dctx.fill();
   });
   dctx.fillStyle='#e94560';dctx.font='6px JetBrains Mono,monospace';dctx.textAlign='center';dctx.fillText('US',usx,usy+dUH/2+8);
-  const tY=cy+hl+14;
+  const wCy=cy+dfOff; // wheel center Y in diagram
+  const tY=Math.max(cy+hl,wCy+wl/2)+14;
   dctx.strokeStyle='rgba(255,255,255,0.2)';dctx.lineWidth=0.5;
-  dctx.beginPath();dctx.moveTo(cx-ht,cy);dctx.lineTo(cx-ht,tY);dctx.moveTo(cx+ht,cy);dctx.lineTo(cx+ht,tY);dctx.moveTo(cx-ht,tY);dctx.lineTo(cx+ht,tY);dctx.stroke();
+  dctx.beginPath();dctx.moveTo(cx-ht,wCy);dctx.lineTo(cx-ht,tY);dctx.moveTo(cx+ht,wCy);dctx.lineTo(cx+ht,tY);dctx.moveTo(cx-ht,tY);dctx.lineTo(cx+ht,tY);dctx.stroke();
   dctx.fillStyle='#8b949e';dctx.font='7px JetBrains Mono,monospace';dctx.textAlign='center';dctx.fillText(cfg.axleTrack+'mm',cx,tY+8);
 }
 
@@ -1480,8 +1511,8 @@ function drawTerrainPiP(){
     const sensorOff=cfg.colorHeight-wr; // sensor offset below(-) or above(+) axle
     const pitchRad=-robot.tilt*Math.PI/180; // canvas rotation (negative: canvas Y is inverted)
 
-    // Pivot point: drive axle center in plot coords
-    const pivotX=v.toX(0), pivotY=v.toY(bodyPlane.c);
+    // Pivot point: drive axle center in plot coords (at driveFwd from hub center)
+    const pivotX=v.toX(cfg.driveFwd), pivotY=v.toY(bodyPlane.c);
 
     ctx.save();
     ctx.beginPath();ctx.rect(v.plotL,v.plotT,v.plotR-v.plotL,plotH);ctx.clip();
@@ -1491,8 +1522,9 @@ function drawTerrainPiP(){
     ctx.translate(pivotX,pivotY);
     ctx.rotate(pitchRad);
     // All coords now in mm relative to drive axle: right=forward, up=+Z
-    // Hub body (88mm long × 30mm tall, centered on axle)
-    const hr=-HUB.L/2*sx, hf=HUB.L/2*sx;
+    // Hub body (88mm long × 30mm tall, centered on hub = -driveFwd from axle)
+    const hubOff=-cfg.driveFwd*sx; // hub center offset from drive axle
+    const hr=(-HUB.L/2-cfg.driveFwd)*sx, hf=(HUB.L/2-cfg.driveFwd)*sx;
     const hubHpx=hubH*sy;
     ctx.fillStyle='rgba(42,58,92,0.7)';ctx.strokeStyle='#4a6fa5';ctx.lineWidth=1;
     ctx.beginPath();
@@ -1501,13 +1533,13 @@ function drawTerrainPiP(){
     // Front direction indicator (red bar at front edge)
     ctx.fillStyle='#e94560';
     ctx.fillRect(hf-1.5,-hubHpx,3,hubHpx);
-    // Drive wheel (circle at origin)
+    // Drive wheel (at axle origin = pivot)
     const wrPx=Math.max(3,wr*sy);
     ctx.fillStyle='#333';ctx.strokeStyle='#888';ctx.lineWidth=1;
     ctx.beginPath();ctx.arc(0,0,wrPx,0,Math.PI*2);ctx.fill();ctx.stroke();
     ctx.fillStyle='#aaa';ctx.beginPath();ctx.arc(0,0,1.5,0,Math.PI*2);ctx.fill();
-    // Passive wheel (small caster at passiveFwd, hanging below axle on bracket)
-    const pFwdPx=cfg.passiveFwd*sx;
+    // Passive wheel (small caster, offset from drive axle)
+    const pFwdPx=(cfg.passiveFwd-cfg.driveFwd)*sx;
     const pAxleDrop=(wr-passiveR)*sy; // passive axle is lower than drive axle by (wr-passiveR)
     const pRPx=Math.max(2,passiveR*sy);
     // Bracket from body plane down to passive axle
@@ -1516,8 +1548,8 @@ function drawTerrainPiP(){
     // Passive wheel circle
     ctx.fillStyle='#2a2a3a';ctx.strokeStyle='#666';ctx.lineWidth=1;
     ctx.beginPath();ctx.arc(pFwdPx,pAxleDrop,pRPx,0,Math.PI*2);ctx.fill();ctx.stroke();
-    // Colour sensor (at colorFwd, sensorOff below axle)
-    const csFwdPx=cfg.colorFwd*sx;
+    // Colour sensor (offset from drive axle)
+    const csFwdPx=(cfg.colorFwd-cfg.driveFwd)*sx;
     const csZPx=-sensorOff*sy; // positive = below axle in canvas (Y down)
     const csW=Math.max(4,6*sx), csH2=Math.max(4,12*sy);
     ctx.fillStyle='rgba(0,200,255,0.8)';ctx.strokeStyle='#00c8ff';ctx.lineWidth=1;
@@ -1530,7 +1562,8 @@ function drawTerrainPiP(){
 
     // Sensor-to-ground line (in plot space, not rotated)
     const csD=cfg.colorFwd;
-    const csSensorZ=bodyPlane.b*csD+bodyPlane.c+sensorOff;
+    const csDRel=csD-cfg.driveFwd; // fwd relative to drive axle for body plane
+    const csSensorZ=bodyPlane.b*csDRel+bodyPlane.c+sensorOff;
     const csGroundZ=elevAt(robot.x+csD*Math.sin(rad),robot.y-csD*Math.cos(rad));
     ctx.strokeStyle='rgba(0,200,255,0.3)';ctx.lineWidth=0.5;ctx.setLineDash([2,2]);
     ctx.beginPath();ctx.moveTo(v.toX(csD),v.toY(csSensorZ));ctx.lineTo(v.toX(csD),v.toY(csGroundZ));ctx.stroke();
@@ -1600,7 +1633,7 @@ function drawTerrainPiP(){
 
     // Sensor-to-ground lines (in plot space, not rotated)
     [{d:-cfg.colorSpread},{d:cfg.colorSpread}].forEach(s=>{
-      const sz=bodyPlane.a*s.d+bodyPlane.b*cfg.colorFwd+bodyPlane.c+sensorOff;
+      const sz=bodyPlane.a*s.d+bodyPlane.b*(cfg.colorFwd-cfg.driveFwd)+bodyPlane.c+sensorOff;
       const gx=robot.x+s.d*Math.cos(rad)+cfg.colorFwd*Math.sin(rad);
       const gy=robot.y+s.d*Math.sin(rad)-cfg.colorFwd*Math.cos(rad);
       const gz=elevAt(gx,gy);
@@ -1941,7 +1974,7 @@ function toggleRun(){
   if(running){lastTime=null;collapseConfigSections(true);}
   else{collapseConfigSections(false);}
 }
-function resetRobot(){if(userCodeRunning)stopUserCode();running=false;document.getElementById('btnRun').textContent='RUN';document.getElementById('btnRun').className='btn primary';robot.tilt=0;robot.rampState='none';lastTime=null;spawnAtStart();computeTilt();setViewLevel(robot.level);}
+function resetRobot(){if(userCodeRunning)stopUserCode();running=false;document.getElementById('btnRun').textContent='RUN';document.getElementById('btnRun').className='btn primary';robot.tilt=0;robot.rampState='none';robot.stalled=false;lastTime=null;spawnAtStart();computeTilt();setViewLevel(robot.level);}
 function setViewLevel(lv){
   viewLevel=lv;
   if(!running) robot.level=lv;
@@ -1952,6 +1985,7 @@ function toggleSection(t){t.classList.toggle('collapsed');t.nextElementSibling.c
 function updateConfig(){
   cfg.wheelDiam  =+document.getElementById('s_wheelDiam').value;
   cfg.axleTrack  =+document.getElementById('s_axleTrack').value;
+  cfg.driveFwd   =+document.getElementById('s_driveFwd').value;
   cfg.colorFwd   =+document.getElementById('s_colorFwd').value;
   cfg.colorSpread=+document.getElementById('s_colorSpread').value;
   cfg.colorHeight=+document.getElementById('s_colorHeight').value;
@@ -1961,6 +1995,7 @@ function updateConfig(){
   cfg.imuDrift   =+document.getElementById('s_imuDrift').value;
   document.getElementById('v_wheelDiam').textContent=cfg.wheelDiam+' mm';
   document.getElementById('v_axleTrack').textContent=cfg.axleTrack+' mm';
+  document.getElementById('v_driveFwd').textContent=cfg.driveFwd+' mm';
   document.getElementById('v_colorFwd').textContent=cfg.colorFwd+' mm';
   document.getElementById('v_colorSpread').textContent=cfg.colorSpread+' mm';
   document.getElementById('v_colorHeight').textContent=cfg.colorHeight+' mm';
@@ -1973,7 +2008,7 @@ function updateConfig(){
 }
 function loadConfig(){
   const s=localStorage.getItem('rcjl_cfg');
-  if(s){try{Object.assign(cfg,JSON.parse(s));['wheelDiam','axleTrack','colorFwd','colorSpread','colorHeight','ultraFwd','passiveFwd','passiveLat','imuDrift'].forEach(k=>document.getElementById('s_'+k).value=cfg[k]);updateConfig();}catch(e){}}
+  if(s){try{Object.assign(cfg,JSON.parse(s));['wheelDiam','axleTrack','driveFwd','colorFwd','colorSpread','colorHeight','ultraFwd','passiveFwd','passiveLat','imuDrift'].forEach(k=>document.getElementById('s_'+k).value=cfg[k]);updateConfig();}catch(e){}}
 }
 
 const keys={};
@@ -2514,7 +2549,7 @@ function buildSkulptModules(){
     '    });\n'+
     '    $loc.angle=new Sk.builtin.func(function(self){return new Sk.builtin.float_(sim.motorAngle(self._side));});\n'+
     '    $loc.speed=new Sk.builtin.func(function(self){return new Sk.builtin.float_(sim.motorSpeed(self._side));});\n'+
-    '    $loc.stalled=new Sk.builtin.func(function(self){return Sk.builtin.bool(false);});\n'+
+    '    $loc.stalled=new Sk.builtin.func(function(self){return Sk.builtin.bool(sim.stalled());});\n'+
     '    $loc.reset_angle=new Sk.builtin.func(function(self,angle){\n'+
     '      sim.motorResetAngle(self._side);});\n'+
     '  },"Motor",[]);\n'+
@@ -2615,7 +2650,7 @@ function buildSkulptModules(){
     '    $loc.distance=new Sk.builtin.func(function(self){return new Sk.builtin.float_(sim.odometry().dist);});\n'+
     '    $loc.angle=new Sk.builtin.func(function(self){return new Sk.builtin.float_(sim.odometry().angle);});\n'+
     '    $loc.reset=new Sk.builtin.func(function(self){sim.resetOdometry();});\n'+
-    '    $loc.stalled=new Sk.builtin.func(function(self){return Sk.builtin.bool(false);});\n'+
+    '    $loc.stalled=new Sk.builtin.func(function(self){return Sk.builtin.bool(sim.stalled());});\n'+
     '    $loc.done=new Sk.builtin.func(function(self){return Sk.builtin.bool(self._done);});\n'+
     '    $loc.settings=new Sk.builtin.func(function(self,ss,sa,tr,ta){\n'+
     '      if(ss!==undefined)self._sSpeed=Sk.ffi.remapToJs(ss);\n'+
@@ -2663,6 +2698,7 @@ function setupSimShim(){
     robotY:()=>robot.y,
     heading:()=>robot.heading,
     tilt:()=>robot.tilt||0,
+    stalled:()=>robot.stalled||false,
     // Odometry
     odometry:()=>{
       const dx=robot.x-odo.startX,dy=robot.y-odo.startY;
